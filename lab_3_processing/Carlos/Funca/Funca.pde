@@ -1,29 +1,134 @@
+//Laboratorio 3
+//Integrantes del grupo:
+// Bastian Loyola 
+// Carlos Retamales
+// Fabian Sepulveda
+
+// Estudiar la modelación de grupos de agentes con comportamiento de tipo 
+// "flocking" (bandadas de aves, cardúmenes de peces, etc.) y su aplicación
+// con la leyes de conducción basada fuerzas de alineación, repulsión y separación.
+
+// Elementos de la simulación:
+// - Agentes: Personas
+// - Entorno: Paredes y pilares
+// - Comportamiento: Leyes de conducción basada en fuerzas de alineación, repulsión y separación
+
 ArrayList<Person> people;
 ArrayList<Pillar> pillars;
 ArrayList<Wall> walls;
-float lastPersonTime = 0;
-PVector target;
 
+//Variables
+
+// Paredes
+// Pared superior
+int position_iniWtopx;
+int position_iniWtopy;
+int position_finWtopx;
+int position_finWtopy;
+// Pared inferior
+int position_iniWbotx;
+int position_iniWboty;
+int position_finWbotx;
+int position_finWboty;
+
+// Pilares
+// Pilar grande
+int position_pBx;
+int position_pBy;
+int radio_pB;
+// Pilar pequeño
+int position_pSx;
+int position_pSy;
+int radio_pS;
+// Pilar por defecto
+int radio_p;
+
+// Personas
+// Diametro de las personas
+int personDiameter;
+// Tiempo de creación de una persona
+int creationTime;
+// X de creación de una persona
+int creationX;
+// Rango Y de creación de una persona
+int creationRange_iniY;
+int creationRange_finY;
+
+// Tiempo en milisegundos desde el último ingreso de una persona
+float lastPersonTime = 0;
+
+// Posición objetivo (salida) 
+PVector target;
+PVector target_top;
+PVector target_bot;
+int target_topx;
+int target_topy;
+int target_botx;
+int target_boty;
+
+// Seteo de la simulación
 void setup() {
+  
+  // Tamaño de la sala de simulación
   size(700, 500);
+
+  // Paredes
+  position_iniWtopx = 0;
+  position_iniWtopy = 0;
+  position_finWtopx = 600;
+  position_finWtopy = 216;
+  position_iniWbotx = 600;
+  position_iniWboty = 284;
+  position_finWbotx = 0;
+  position_finWboty = 500;
+
+  // Pilares
+  position_pBx = 200;
+  position_pBy = 200;
+  radio_pB = 25;
+  position_pSx = 380;
+  position_pSy = 280;
+  radio_pS = 15;
+  radio_p = 20;
+
+  // Personas
+  personDiameter = 15;
+  creationTime = 1000;
+  creationX = 5;
+  creationRange_iniY = 15;
+  creationRange_finY = 485;
+
+  //Target (salida) top y bot
+  target_topx = 600;
+  target_topy = 224;
+  target_botx = 600;
+  target_boty = 276;
+
 
   // Inicializar la lista de personas
   people = new ArrayList<Person>();
 
   // Inicializar los pilares y las paredes
   pillars = new ArrayList<Pillar>();
-  pillars.add(new Pillar(new PVector(200, 200), 25));
-  pillars.add(new Pillar(new PVector(380, 280), 15));
+  pillars.add(new Pillar(new PVector(position_pBx, position_pBy), radio_pB));
+  pillars.add(new Pillar(new PVector(position_pSx, position_pSy), radio_pS));
 
   walls = new ArrayList<Wall>();
-  walls.add(new Wall(new PVector(0, 0), new PVector(600, 216)));
-  walls.add(new Wall(new PVector(0, 500), new PVector(600, 284)));
+  walls.add(new Wall(new PVector(position_iniWtopx, position_iniWtopy), new PVector(position_finWtopx, position_finWtopy)));
+  walls.add(new Wall(new PVector(position_iniWbotx, position_iniWboty), new PVector(position_finWbotx, position_finWboty)));
 
   // Definir la posición objetivo (salida)
-  target = new PVector(600, 250);
+  target_top = new PVector(target_topx, target_topy);
+  target_bot = new PVector(target_botx, target_boty);
 }
 
+// Dibujar la simulación
 void draw() {
+  
+  //Color de las personas
+  fill(0, 0, 255);
+
+  // Fondo blanco
   background(255);
 
   // Dibujar los pilares y paredes
@@ -35,11 +140,23 @@ void draw() {
     wall.display();
   }
 
-  // Generar una nueva persona cada 2 segundos
-  if (millis() - lastPersonTime > 500) {
-    float personY = random(15, 485);
+  // Generar una nueva persona cada cierto tiempo
+  if (millis() - lastPersonTime > creationTime) {
+    float personY = random(creationRange_iniY, creationRange_finY);
+    // Verificar su posicion en Y para definir su target
+    if (personY < position_finWtopy) {
+      target = target_top;
+    } else {
+      if (personY > position_iniWboty) {
+        target = target_bot;
+      }
+      else {
+        target = new PVector((target_top.x+target_bot.x)/2, (target_top.y+target_bot.y)/2);
+      }
+    }
+
     // Añadir una nueva persona a la lista de personas
-    people.add(new Person(new PVector(5, personY), random(1, 3), target, pillars, walls, people));
+    people.add(new Person(new PVector(creationX, personY), random(1, 3), personDiameter, target, pillars, walls, people));
     lastPersonTime = millis();
   }
 
@@ -50,63 +167,96 @@ void draw() {
     person.display();
 
     // Verificar si la persona ha llegado a la salida y eliminarla si es el caso
-    if (person.position.dist(target) < 10 || person.position.x > width) {
+    if (person.position.dist(target) < 5 || person.position.x > width || person.position.y > height || person.position.y < 0 || person.position.x > max(target_topx, target_botx)) {
       people.remove(i);
     }
   }
 }
 
+// Añadir un nuevo pilar al hacer click derecho
+void mousePressed() {
+  // Verificar si se ha presionado el botón derecho del ratón
+  if (mouseButton == RIGHT) {
+    // Añadir un nuevo pilar en la posición del ratón
+    pillars.add(new Pillar(new PVector(mouseX, mouseY), radio_p));
+  }
+}
+
+// Clase Persona
 class Person {
   PVector position;  // Posición de la persona
   float speed;  // Velocidad de movimiento de la persona
+  int diameter;  // Diámetro de la persona
   PVector target;  // Posición objetivo (salida)
   ArrayList<Pillar> pillars;
   ArrayList<Wall> walls;
   ArrayList<Person> people;
 
-  Person(PVector position, float speed, PVector target, ArrayList<Pillar> pillars, ArrayList<Wall> walls, ArrayList<Person> people) {
+  Person(PVector position, float speed, int diameter, PVector target, ArrayList<Pillar> pillars, ArrayList<Wall> walls, ArrayList<Person> people) {
     this.position = position;
     this.speed = speed;
+    this.diameter = diameter;
     this.target = target;
     this.pillars = pillars;
     this.walls = walls;
     this.people = people;
   }
 
+  // Dibujar la persona
   void update() {
-    // Calcula la dirección hacia la salida
+    // Calcular la dirección hacia la salida
     PVector direction = PVector.sub(target, position);
     direction.normalize();
 
-    // Verifica si la persona está chocando con un pilar o una pared
+    // Verificar si la persona está chocando con algún pilar
     for (Pillar pillar : pillars) {
       if (isCollidingWithPillar(pillar)) {
-        direction = adjustDirectionForCollision(direction);
-      }
-    }
-    
-    for (Wall wall : walls) {
-      if (isCollidingWithWall(wall)) {
-        direction = adjustDirectionForCollision(direction);
+        // Calcular la dirección opuesta al pilar
+        PVector oppositeDirection = PVector.sub(position, pillar.position);
+        oppositeDirection.normalize();
+
+        // Calcular la dirección perpendicular a la colisión
+        PVector perpendicularDirection = new PVector(-oppositeDirection.y, oppositeDirection.x);
+        perpendicularDirection.normalize();
+
+        // Si la persona está a la izquierda del pilar, invertir la dirección perpendicular
+        if (position.x < pillar.position.x) {
+          perpendicularDirection.mult(-1);
+        }
+
+        // Combinar la dirección opuesta al pilar y la dirección perpendicular
+        PVector modifiedDirection = PVector.add(oppositeDirection.mult(0.8), perpendicularDirection.mult(0.2));
+        modifiedDirection.normalize();
+
+        // Modificar la dirección de la persona
+        direction = modifiedDirection;
       }
     }
 
-    // Verifica si la persona está chocando con otra persona
+    // Verificar si la persona está chocando con alguna otra persona
     for (Person other : people) {
       if (other != this && isCollidingWithPerson(other)) {
-        direction = adjustDirectionForCollision(direction);
+        // Calcular la dirección opuesta a la otra persona
+        PVector oppositeDirection = PVector.sub(position, other.position);
+        oppositeDirection.normalize();
+
+        // Ajustar la dirección de la persona para alejarse de la otra persona
+        direction.add(oppositeDirection);
+        direction.normalize();
       }
     }
 
-    // Actualiza la posición de la persona en la dirección hacia la salida
+    // Actualizar la posición de la persona en la dirección hacia la salida
     position.add(PVector.mult(direction, speed));
   }
 
+  // Dibujar la persona
   void display() {
     fill(255, 0, 0);  // Establece el color de relleno a rojo
-    ellipse(position.x, position.y, 15, 15);  // Dibuja la persona
+    ellipse(position.x, position.y, diameter, diameter);  // Dibuja un círculo en la posición de la persona
   }
 
+  // Verificar si la persona está chocando con un pilar
   boolean isCollidingWithPillar(Pillar pillar) {
     // Calcula la distancia entre la posición de la persona y la posición del pilar
     float distance = position.dist(pillar.position);
@@ -115,18 +265,21 @@ class Person {
     return distance <= pillar.radius;
   }
   
+  // Verificar si la persona está chocando con una pared
   boolean isCollidingWithWall(Wall wall) {
     return wall.isPointOnWall(position);
   }
 
+  // Verificar si la persona está chocando con otra persona
   boolean isCollidingWithPerson(Person other) {
     // Calcula la distancia entre la posición de esta persona y la otra
     float distance = position.dist(other.position);
 
     // Verifica si la distancia es menor o igual a la suma de los radios de las dos personas
-    return distance <= 7.5 + 7.5;  // Asumiendo que el radio de una persona es 7.5
+    return distance <= diameter / 2 + other.diameter / 2;
   }
 
+  // Ajustar la dirección de la persona para evitar una colisión
   PVector adjustDirectionForCollision(PVector direction) {
     // Calcula la dirección hacia el punto opuesto al objeto con el que se chocó
     PVector oppositeDirection = PVector.sub(position, direction);
@@ -144,6 +297,7 @@ class Person {
   }
 }
 
+// Clase Pilar
 class Pillar {
   PVector position;  // Posición del pilar
   float radius;  // Radio del pilar
@@ -153,12 +307,14 @@ class Pillar {
     this.radius = radius;
   }
 
+  // Dibujar el pilar
   void display() {
     fill(150);  // Establece el color de relleno a gris
     ellipse(position.x, position.y, radius*2, radius*2);  // Dibuja el pilar
   }
 }
 
+// Clase Pared
 class Wall {
   PVector start;  // Punto inicial de la pared
   PVector end;  // Punto final de la pared
@@ -168,6 +324,7 @@ class Wall {
     this.end = end;
   }
 
+  // Dibujar la pared
   void display() {
     stroke(0);  // Establece el color del trazo a negro
     line(start.x, start.y, end.x, end.y);  // Dibuja la pared
