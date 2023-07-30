@@ -17,6 +17,31 @@ ArrayList<Person> people;
 ArrayList<Pillar> pillars;
 ArrayList<Wall> walls;
 
+//Constantes de la simulación
+
+float A_i = 25.0; // Alineación
+float B_i = 0.08; // Alineación
+int k = 750; // Separación
+int kappa = 3000; // Separación
+float v_0 = 5.0; // Magnitud de la velocidad deseada
+float tau = 0.5; // Tiempo de reacción
+
+//Restriccion sistema Reynolds
+float v_max = 2.0; // Velocidad máxima
+float f_max = 10.0; // Fuerza máxima
+
+//Modelacion de fuerzas
+// m_i * dv_i/dt = m_i * v^0_i * e^0_i - v_i / τ_i + Σ[f_ij]_(j≠i) + Σ[f_iw] + Σ[f_ip] 
+// donde:
+// m_i es la masa de la persona i
+// v_i es la velocidad de la persona i
+// v^0_i es la velocidad deseada de la persona i
+// e^0_i es la dirección deseada de desplazamiento de la persona i
+// τ_i es el tiempo caracteristico de movimiento de la persona i
+// f_ij es la fuerza ejercida por la persona j sobre la persona i
+// f_iw es la fuerza ejercida por la pared w sobre la persona i
+// f_ip es la fuerza ejercida por el pilar p sobre la persona i
+
 //Variables
 
 // Paredes
@@ -44,6 +69,10 @@ int radio_pS;
 int radio_p;
 
 // Personas
+// Velocidad inicial de las personas
+float person_initV;
+// Masa de las personas (se asume que es 1 y no se utiliza)
+float personMass;
 // Diametro de las personas
 int personDiameter;
 // Tiempo de creación de una persona
@@ -92,8 +121,10 @@ void setup() {
   radio_p = 20;
 
   // Personas
+  person_initV = 0; // Velocidad inicial de las personas
+  personMass = 1;
   personDiameter = 15;
-  creationTime = 1000;
+  creationTime = 20;
   creationX = 5;
   creationRange_iniY = 15;
   creationRange_finY = 485;
@@ -156,7 +187,7 @@ void draw() {
     }
 
     // Añadir una nueva persona a la lista de personas
-    people.add(new Person(new PVector(creationX, personY), random(1, 3), personDiameter, target, pillars, walls, people));
+    people.add(new Person(new PVector(creationX, personY), person_initV, personMass, personDiameter, target, pillars, walls, people));
     lastPersonTime = millis();
   }
 
@@ -186,15 +217,17 @@ void mousePressed() {
 class Person {
   PVector position;  // Posición de la persona
   float speed;  // Velocidad de movimiento de la persona
+  float mass;  // Masa de la persona
   int diameter;  // Diámetro de la persona
   PVector target;  // Posición objetivo (salida)
   ArrayList<Pillar> pillars;
   ArrayList<Wall> walls;
   ArrayList<Person> people;
 
-  Person(PVector position, float speed, int diameter, PVector target, ArrayList<Pillar> pillars, ArrayList<Wall> walls, ArrayList<Person> people) {
+  Person(PVector position, float speed, float mass, int diameter, PVector target, ArrayList<Pillar> pillars, ArrayList<Wall> walls, ArrayList<Person> people) {
     this.position = position;
     this.speed = speed;
+    this.mass = mass;
     this.diameter = diameter;
     this.target = target;
     this.pillars = pillars;
@@ -246,6 +279,34 @@ class Person {
       }
     }
 
+    //Calcular la direccion deseada de desplazamiento
+    PVector e_0 = PVector.sub(target, position);
+    e_0.normalize();
+    
+    //Calcular la suma de las fuerzas ejercidas por las otras persona, paredes y pilares
+    PVector sumForces = new PVector(0, 0);
+    for (Person other : people) {
+      if (other != this) {
+        sumForces.add(calculateForceWithPerson(other));
+      }
+    }
+    for (Wall wall : walls) {
+      sumForces.add(calculateForceWithWall(wall));
+    }
+    for (Pillar pillar : pillars) {
+      sumForces.add(calculateForceWithPillar(pillar));
+    }
+
+    //Calcular la aceleracion en base a la ecuacion de fuerza
+    PVector acceleration = PVector.mult(e_0, v_0);
+    PVector subtractedVector = new PVector(speed / tau, speed / tau);
+    acceleration.sub(subtractedVector);
+    acceleration.add(sumForces);
+
+    // Actualizar la velocidad de la persona
+    speed += acceleration.mag() * tau;
+    speed = constrain(speed, 0, v_max);  // Limitamos la velocidad entre 0 y v_max
+
     // Actualizar la posición de la persona en la dirección hacia la salida
     position.add(PVector.mult(direction, speed));
   }
@@ -279,7 +340,7 @@ class Person {
     return distance <= diameter / 2 + other.diameter / 2;
   }
 
-  // Ajustar la dirección de la persona para evitar una colisión
+  // Ajustar la dirección de la persona por una colisión
   PVector adjustDirectionForCollision(PVector direction) {
     // Calcula la dirección hacia el punto opuesto al objeto con el que se chocó
     PVector oppositeDirection = PVector.sub(position, direction);
@@ -295,6 +356,46 @@ class Person {
 
     return modifiedDirection;
   }
+
+  //Calcular fuerza entre dos personas
+  PVector calculateForceWithPerson(Person other) {
+    // Calcular la dirección entre las dos personas
+    PVector direction = PVector.sub(other.position, position);
+    float distance = direction.mag();
+    direction.normalize();
+
+    float forceMagnitude = A_i / (distance + B_i);
+    return PVector.mult(direction, forceMagnitude);
+  }
+
+  // Calcular la fuerza de repulsión entre la persona y un pilar
+  PVector calculateForceWithPillar(Pillar pillar) {
+    // Calcular la dirección entre la persona y el pilar
+    PVector direction = PVector.sub(pillar.position, position);
+    float distance = direction.mag();
+    direction.normalize();
+
+    float forceMagnitude = k / (distance + kappa);
+    return PVector.mult(direction, forceMagnitude);
+  }
+
+    // Calcular la fuerza de repulsión entre la persona y una pared
+  PVector calculateForceWithWall(Wall wall) {
+    // Calcular la dirección entre la persona y la pared
+    PVector direction = wall.getNormal(position);
+    direction.normalize();
+
+    // Calcular la distancia entre la persona y la pared
+    float distance = wall.getDistance(position);
+
+    // Calcular la fuerza de repulsión
+    float forceMagnitude = k / (distance + kappa);
+
+    // Devolver el vector de fuerza resultante
+    return PVector.mult(direction, forceMagnitude);
+  }
+
+
 }
 
 // Clase Pilar
@@ -328,6 +429,26 @@ class Wall {
   void display() {
     stroke(0);  // Establece el color del trazo a negro
     line(start.x, start.y, end.x, end.y);  // Dibuja la pared
+  }
+  // Calcular la normal de la pared
+  PVector getNormal(PVector position) {
+    PVector wallDirection = PVector.sub(end, start);
+    PVector wallToPosition = PVector.sub(position, start);
+    
+    float dotProduct = wallDirection.dot(wallToPosition);
+    
+    // Proyección del punto sobre la línea de la pared
+    PVector projectedPoint = PVector.add(start, PVector.mult(wallDirection, dotProduct / wallDirection.magSq()));
+    
+    // Normal desde el punto a la línea de la pared
+    PVector normal = PVector.sub(position, projectedPoint);
+    
+    return normal;
+  }
+  
+  // Calcular la distancia desde el punto hasta la pared
+  float getDistance(PVector position) {
+    return getNormal(position).mag();
   }
 
   boolean isPointOnWall(PVector point) {
